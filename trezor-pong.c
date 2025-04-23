@@ -11,7 +11,14 @@
 #include "buttons.h"
 #include "usb.h"
 #include "oled.h"
+#if EMULATOR
 #include "trezor-sdl.h"
+#else
+struct {
+    int w;
+    int h;
+} screen = { OLED_WIDTH, OLED_HEIGHT };
+#endif
 
 #define WINNING_SCORE 3
 
@@ -168,10 +175,12 @@ static const uint8_t bmp_game_over_data[] = {
 static const BITMAP bmp_title = {128, 64, bmp_title_data};
 static const BITMAP bmp_game_over = {128, 64, bmp_game_over_data};
 
+#if EMULATOR
 SDL_Surface screen = {
-    .w = OLED_HEIGHT,
-    .h = OLED_WIDTH
+    .w = OLED_WIDTH,
+    .h = OLED_HEIGHT
 };
+#endif
 
 // initialize starting position and sizes of game elemements
 static void
@@ -490,8 +499,8 @@ draw_game_over(int p) {
     }
 
     oledDrawBitmap(0, 0, &bmp_game_over);
-    oledDrawStringCenter(8, winner, FONT_STANDARD);
-    oledDrawStringCenter(OLED_HEIGHT - 8, "Press any button to begin!", FONT_STANDARD);
+    oledDrawStringCenter(OLED_WIDTH / 2, 8, winner, FONT_STANDARD);
+    oledDrawStringCenter(OLED_WIDTH / 2, OLED_HEIGHT - 8, "Press any button to begin!", FONT_STANDARD);
     return;
 }
 
@@ -499,13 +508,13 @@ static void
 draw_menu(void) {
 
     oledDrawBitmap(0, 0, &bmp_title);
-    oledDrawStringCenter(OLED_HEIGHT - 8, "Press any button to begin!", FONT_STANDARD);
+    oledDrawStringCenter(OLED_WIDTH / 2, OLED_HEIGHT - 8, "Press any button to begin!", FONT_STANDARD);
     return;
 }
 
 static void
 draw_background(void) {
- 
+#if EMULATOR
     SDL_Rect src;
     
     // draw bg with net
@@ -521,11 +530,14 @@ draw_background(void) {
         
         printf("fill rectangle faliled in func draw_background()");
     }
+#else
+    oledClear();
+#endif
 }
 
 static void
 draw_net(void) {
-
+#if EMULATOR
     SDL_Rect net;
     
     net.x = screen.w / 2;
@@ -547,12 +559,21 @@ draw_net(void) {
 
         net.y = net.y + 5;
     }
-
+#else
+    int x = OLED_WIDTH / 2;
+    int y = 2;
+    for (int i = 0; i < 12; i++) {
+        for (int dy = 0; dy < 5; dy++) {
+            oledDrawPixel(x, y + dy);
+        }
+        y += 5;
+    }
+#endif
 }
 
 static void
 draw_ball(void) {
-    
+#if EMULATOR
     SDL_Rect src;
 
     src.x = ball.x;
@@ -566,11 +587,18 @@ draw_ball(void) {
     
         printf("fill rectangle faliled in func drawball()");
     }
+#else
+    for (int dx = 0; dx < ball.w; dx++) {
+        for (int dy = 0; dy < ball.h; dy++) {
+            oledDrawPixel(ball.x + dx, ball.y + dy);
+        }
+    }
+#endif
 }
 
 void
 draw_paddle(void) {
-
+#if EMULATOR
     SDL_Rect src;
     int i;
 
@@ -588,6 +616,15 @@ draw_paddle(void) {
             printf("fill rectangle faliled in func draw_paddle()");
         }
     }
+#else
+    for (int i = 0; i < 2; i++) {
+        for (int dx = 0; dx < paddle[i].w; dx++) {
+            for (int dy = 0; dy < paddle[i].h; dy++) {
+                oledDrawPixel(paddle[i].x + dx, paddle[i].y + dy);
+            }
+        }
+    }
+#endif
 }
 
 static void
@@ -612,11 +649,16 @@ pong_main(void) {
     /* Initialize the ball position data. */
     init_ball();
 
-    Uint32 next_game_tick = SDL_GetTicks();
     int state = 0;
     int r = 0;
     int quit = 0;
     int sleep = 0;
+
+#if EMULATOR
+    Uint32 next_game_tick = SDL_GetTicks();
+#else
+    uint32_t next_game_tick = timer_ms();  // аналог SDL_GetTicks()
+#endif
 
     /* Animate */
     while (quit == 0) {
@@ -650,6 +692,7 @@ pong_main(void) {
         // display gameover
         } else if (state == 2) {
         
+#if EMULATOR
             if (button.NoDown && button.YesDown)
             {
                 state = 0;
@@ -657,6 +700,12 @@ pong_main(void) {
                 // while the main menu is showing
                 SDL_Delay(500);
             }
+#else
+            if (button.NoDown && button.YesDown) {
+                state = 0;
+                delay(500);
+            }
+#endif
 
             // display gameover
             draw_game_over(r);
@@ -703,6 +752,7 @@ pong_main(void) {
             draw_player_1_score();
         }
 
+#if EMULATOR
         /* Ask SDL to update the entire screen. */
         SDL_Flip(&screen);
 
@@ -713,6 +763,16 @@ pong_main(void) {
         {
             SDL_Delay(sleep);
         }
+#else
+        oledRefresh();
+        next_game_tick += 1000 / 10;
+        sleep = next_game_tick - timer_ms();
+
+        if (sleep >= 0) {
+            delay(sleep);
+        }
+#endif
+
     }
     
     return 0;

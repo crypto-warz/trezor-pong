@@ -34,7 +34,7 @@ SDL_GetTicks(void)
 void
 SDL_Delay(Uint32 ms)
 {
-    usbSleep(ms);
+    waitAndProcessUSBRequests(ms);
 }
 
 int
